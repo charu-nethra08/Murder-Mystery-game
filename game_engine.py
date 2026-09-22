@@ -281,19 +281,22 @@ class Case:
         self.solved = False
 
     # ------------------------------------------------------------------
-    def perform_action(self, action: str) -> Optional[Clue]:
-        """Reveal the clue tied to this action (STACK logs the action)."""
+    def perform_action(self, action: str) -> list[Clue]:
+        """Reveal every not-yet-found clue tied to this action (STACK logs the action once)."""
         self.stack.push(action)
         self.actions_done.add(action)
-        clue = next((c for c in self.clues if c.action == action), None)
-        if clue is None or clue.id in self.found_clue_ids:
-            return None
-        self.found_clue_ids.add(clue.id)
-        self.timeline.insert(clue)
-        self.locker.add(clue.points_to, clue)
-        self._apply_debunking()
-        self._refresh_heap()
-        return clue
+        revealed: list[Clue] = []
+        for clue in self.clues:
+            if clue.action != action or clue.id in self.found_clue_ids:
+                continue
+            self.found_clue_ids.add(clue.id)
+            self.timeline.insert(clue)
+            self.locker.add(clue.points_to, clue)
+            revealed.append(clue)
+        if revealed:
+            self._apply_debunking()
+            self._refresh_heap()
+        return revealed
 
     def _apply_debunking(self):
         for c in self.clues:
@@ -399,13 +402,15 @@ def _case_hostel() -> Case:
         Clue("h2", "The victim's phone shows a heated argument thread with Arjun about the unpaid loan.",
              "check_phone", "Arjun Mehta", 20, 21 * 60 + 30, critical=True),
         Clue("h3", "CCTV shows Karan entering the hostel block at 10:45 PM, leaving at 10:50 PM.",
-             "check_cctv", "Karan Singh", 22 * 60 + 45, 22 * 60 + 45, misleading=True, debunked_by="h4"),
+             "check_cctv", "Karan Singh", 15, 22 * 60 + 45, misleading=True, debunked_by="h4"),
         Clue("h4", "The librarian's late-checkout log confirms Karan only returned a borrowed book at that time.",
              "read_messages", "Karan Singh", 0, 22 * 60 + 50),
         Clue("h5", "The mess-hall kitchen knife has been wiped clean, but a faint blood smear remains near the handle.",
              "examine_weapon", "Arjun Mehta", 10, 23 * 60),
         Clue("h6", "A smudged partial fingerprint on the knife handle matches Arjun Mehta.",
              "check_fingerprints", "Arjun Mehta", 20, 23 * 60 + 5, critical=True),
+        Clue("h7", "Meena's rounds log has an unexplained 15-minute gap right around the time of the murder.",
+             "search_room", "Meena Iyer", 8, 20 * 60 + 10),
     ]
     answers = {
         ("Arjun Mehta", "q1"): SuspectAnswer("I was in the library till midnight, studying for an exam.", contradicted_by="h2"),
@@ -473,6 +478,8 @@ def _case_hotel() -> Case:
              "examine_weapon", "Rakesh Malhotra", 20, 21 * 60 + 15, critical=True),
         Clue("o6", "A partial fingerprint on the minibar matches Rakesh Malhotra.",
              "check_fingerprints", "Rakesh Malhotra", 15, 21 * 60 + 20),
+        Clue("o7", "Sana's gym check-in log shows she signed out ten minutes earlier than she claimed.",
+             "search_room", "Sana Sheikh", 8, 20 * 60 + 5),
     ]
     answers = {
         ("Neha Kapoor", "q1"): SuspectAnswer("I was at the front desk all evening, cameras can confirm."),
@@ -540,6 +547,8 @@ def _case_office() -> Case:
              "examine_weapon", "Rohit Bansal", 15, 20 * 60, critical=True),
         Clue("f6", "A partial fingerprint on the paperweight's edge matches Rohit Bansal.",
              "check_fingerprints", "Rohit Bansal", 20, 20 * 60 + 5),
+        Clue("f7", "Anjali's access-card log shows she badged into the finance floor after most staff had left, unexplained.",
+             "search_room", "Anjali Desai", 8, 19 * 60 + 5),
     ]
     answers = {
         ("Rohit Bansal", "q1"): SuspectAnswer("I left the office at 6 PM for a client dinner.", contradicted_by="f2"),
@@ -607,6 +616,8 @@ def _case_mansion() -> Case:
              "examine_weapon", "Nathaniel Grey", 20, 21 * 60, critical=True),
         Clue("m6", "A partial fingerprint on the revolver's chamber matches Nathaniel Grey.",
              "check_fingerprints", "Nathaniel Grey", 15, 21 * 60 + 5),
+        Clue("m7", "A half-burned diary page in the study fireplace, in Lady Cordelia's hand, mentions wanting Alistair 'gone for good.'",
+             "search_room", "Lady Cordelia Grey", 8, 18 * 60 + 5),
     ]
     answers = {
         ("Lady Cordelia Grey", "q1"): SuspectAnswer("I was in the drawing room reading, alone."),
