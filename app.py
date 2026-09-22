@@ -135,7 +135,7 @@ def reset_to_home():
     st.session_state.score = None
     st.session_state.breakdown = None
     st.session_state.reasoning = ""
-    st.session_state.pop("current_suspect", None)
+    st.session_state.pop("suspect_picker", None)
 
 
 # ===========================================================================
@@ -330,8 +330,15 @@ else:
                    "you'll be warned instantly.")
 
         suspect_names = list(case.suspects.keys())
-        if st.session_state.get("current_suspect") not in suspect_names:
-            st.session_state.current_suspect = suspect_names[0]
+        if st.session_state.get("suspect_picker") not in suspect_names:
+            st.session_state.suspect_picker = suspect_names[0]
+
+        def _call_next_suspect():
+            nxt = case.interrogate_next()
+            if nxt:
+                st.session_state.suspect_picker = nxt
+            else:
+                st.session_state["_queue_empty_warning"] = True
 
         colA, colB = st.columns(2)
         with colA:
@@ -339,24 +346,17 @@ else:
                 f"<p class='subtle'>Queue (FIFO): {' → '.join(case.queue.upcoming()) or '(empty)'}</p>",
                 unsafe_allow_html=True,
             )
-            if st.button("📣 Call in next suspect from queue"):
-                nxt = case.interrogate_next()
-                if nxt:
-                    st.session_state.current_suspect = nxt
-                    st.rerun()
-                else:
-                    st.warning("No one left in the queue.")
+            st.button("📣 Call in next suspect from queue", on_click=_call_next_suspect)
+            if st.session_state.pop("_queue_empty_warning", False):
+                st.warning("No one left in the queue.")
         with colB:
-            chosen = st.selectbox(
+            st.selectbox(
                 "...or pick a suspect directly:",
                 suspect_names,
-                index=suspect_names.index(st.session_state.current_suspect),
+                key="suspect_picker",
             )
-            if chosen != st.session_state.current_suspect:
-                st.session_state.current_suspect = chosen
-                st.rerun()
 
-        current = st.session_state.get("current_suspect")
+        current = st.session_state.get("suspect_picker")
         if current:
             s = case.suspects[current]
             st.markdown(
@@ -532,7 +532,7 @@ else:
                 st.session_state.score = None
                 st.session_state.breakdown = None
                 st.session_state.reasoning = ""
-                st.session_state.pop("current_suspect", None)
+                st.session_state.pop("suspect_picker", None)
                 st.session_state.stage = "playing"
                 st.rerun()
             if c2.button("🏠 New Case", use_container_width=True):
