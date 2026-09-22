@@ -81,6 +81,7 @@ h1, h2, h3 { font-family: 'Playfair Display', serif !important; color: #e8c37a !
 .action-btn button { width: 100%; height: 80px; font-size: 17px !important; border-radius: 12px !important;
     border: 1px solid #4a3f2c !important; background: linear-gradient(145deg, #23201b, #17140f) !important;
     color: #e8e0d0 !important; }
+.action-btn button:disabled { opacity: 0.55 !important; }
 .timeline-item { border-left: 3px solid #e8c37a; padding-left: 16px; margin-bottom: 18px; position: relative; }
 .timeline-item::before { content: ''; position: absolute; left: -8px; top: 4px; width: 13px; height: 13px;
     background: #e8c37a; border-radius: 50%; }
@@ -89,6 +90,9 @@ h1, h2, h3 { font-family: 'Playfair Display', serif !important; color: #e8c37a !
 .tagline { text-align: center; }
 .contradiction-box { background: #5d2e2e; border: 1px solid #c9453f; border-radius: 8px; padding: 10px 14px;
     font-weight: bold; color: #ffd9d9; margin-top: 8px; }
+.rank-banner { text-align: center; font-family: 'Playfair Display', serif; font-size: 26px;
+    color: #e8c37a; border: 1px solid #4a3f2c; border-radius: 12px; padding: 14px;
+    background: linear-gradient(145deg, #23201b, #17140f); margin: 14px 0; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -110,6 +114,18 @@ def suspect_card_html(s, hide_details=False):
     """
 
 
+def detective_rank(score: int) -> str:
+    if score >= 90:
+        return "🏆 Master Detective"
+    if score >= 70:
+        return "🕵️ Sharp Investigator"
+    if score >= 50:
+        return "🔍 Competent Sleuth"
+    if score >= 30:
+        return "📋 Rookie Detective"
+    return "🙈 Back to the Academy"
+
+
 def reset_to_home():
     st.session_state.stage = "home"
     st.session_state.view = "Briefing"
@@ -119,6 +135,7 @@ def reset_to_home():
     st.session_state.score = None
     st.session_state.breakdown = None
     st.session_state.reasoning = ""
+    st.session_state.pop("current_suspect", None)
 
 
 # ===========================================================================
@@ -154,7 +171,7 @@ if st.session_state.stage == "home":
         horizontal=True,
         label_visibility="collapsed",
         help="Easy: suspicion scores + hints shown. Medium: scores shown, no hints. "
-             "Hard: suspect motives/alibis hidden until interrogated, suspicion meter shows bars only.",
+             "Hard: suspect motives/alibis hidden until interrogated, suspicion meter and HUD show bars only.",
     )
     st.session_state.pending_difficulty = difficulty
 
@@ -188,13 +205,19 @@ else:
     st.markdown(f"<h1>{case.icon} {case.title}</h1>", unsafe_allow_html=True)
     st.caption(f"Difficulty: **{difficulty}**")
 
+    total_clues = len(case.clues)
+    total_actions = len(ACTIONS)
+
     hud1, hud2, hud3, hud4 = st.columns(4)
-    hud1.metric("🧩 Clues Found", f"{len(case.found_clue_ids)}/6")
+    hud1.metric("🧩 Clues Found", f"{len(case.found_clue_ids)}/{total_clues}")
     hud2.metric("🗣️ Interrogated", f"{len(case.interrogated_suspects)}/4")
-    top = case.heap.top()
-    hud3.metric("🎯 Prime Suspect", top[0] if top else "Unknown")
-    hud4.metric("🔧 Actions Used", f"{len(case.actions_done)}/6")
-    st.progress(len(case.found_clue_ids) / 6)
+    if difficulty == "Hard":
+        hud3.metric("🎯 Prime Suspect", "🔒 Hidden")
+    else:
+        top = case.heap.top()
+        hud3.metric("🎯 Prime Suspect", top[0] if top else "Unknown")
+    hud4.metric("🔧 Actions Used", f"{len(case.actions_done)}/{total_actions}")
+    st.progress(len(case.found_clue_ids) / total_clues)
     st.markdown("---")
 
     st.sidebar.markdown("### 🗺️ Investigation Menu")
@@ -257,11 +280,13 @@ else:
                 st.markdown("<div class='action-btn'>", unsafe_allow_html=True)
                 done = action_key in case.actions_done
                 btn_label = f"{label}\n✅ done" if done else label
-                if st.button(btn_label, key=f"act_{action_key}"):
-                    clue = case.perform_action(action_key)
-                    st.session_state.last_reveal = clue
-                    if clue:
-                        st.toast(f"🧩 New clue discovered!")
+                if st.button(btn_label, key=f"act_{action_key}", disabled=done):
+                    revealed = case.perform_action(action_key)
+                    st.session_state.last_reveal = revealed
+                    if len(revealed) == 1:
+                        st.toast("🧩 New clue discovered!")
+                    elif len(revealed) > 1:
+                        st.toast(f"🧩 {len(revealed)} new clues discovered!")
                     st.rerun()
                 st.markdown("</div>", unsafe_allow_html=True)
 
@@ -276,11 +301,11 @@ else:
         )
 
         if st.session_state.last_reveal:
-            c = st.session_state.last_reveal
-            st.markdown(
-                f"<div class='case-card'><span class='badge badge-found'>NEW CLUE</span><br><br>{c.description}</div>",
-                unsafe_allow_html=True,
-            )
+            for c in st.session_state.last_reveal:
+                st.markdown(
+                    f"<div class='case-card'><span class='badge badge-found'>NEW CLUE</span><br><br>{c.description}</div>",
+                    unsafe_allow_html=True,
+                )
 
         st.markdown("---")
         st.subheader("📋 All clues found so far")
@@ -300,9 +325,13 @@ else:
     # INTERROGATION
     # -----------------------------------------------------------------
     elif view == "Interrogation":
-        st.header("Interrogation System")
+        st.header("🤖 AI Interrogation System")
         st.caption("Pick a suspect and a question. If evidence you've found contradicts their answer, "
                    "you'll be warned instantly.")
+
+        suspect_names = list(case.suspects.keys())
+        if st.session_state.get("current_suspect") not in suspect_names:
+            st.session_state.current_suspect = suspect_names[0]
 
         colA, colB = st.columns(2)
         with colA:
@@ -314,11 +343,18 @@ else:
                 nxt = case.interrogate_next()
                 if nxt:
                     st.session_state.current_suspect = nxt
+                    st.rerun()
                 else:
                     st.warning("No one left in the queue.")
         with colB:
-            chosen = st.selectbox("...or pick a suspect directly:", list(case.suspects.keys()))
-            st.session_state.current_suspect = chosen
+            chosen = st.selectbox(
+                "...or pick a suspect directly:",
+                suspect_names,
+                index=suspect_names.index(st.session_state.current_suspect),
+            )
+            if chosen != st.session_state.current_suspect:
+                st.session_state.current_suspect = chosen
+                st.rerun()
 
         current = st.session_state.get("current_suspect")
         if current:
@@ -424,8 +460,6 @@ else:
 
         for name, s in case.suspects.items():
             dot.node(name, f"{s.avatar}\n{name}", shape="box", fillcolor="#2c2620", color="#e8c37a")
-            for _, rel in case.graph.relations_of(case.victim):
-                pass
             rel_label = next((r for n, r in case.graph.relations_of(case.victim) if n == name), "connected")
             dot.edge("VICTIM", name, label=rel_label, fontsize="9", fontcolor="#b8ab90", color="#6b5c40")
 
@@ -481,6 +515,10 @@ else:
 
             st.markdown("---")
             st.markdown(f"## 🏆 Detective Score: {st.session_state.score}/100")
+            st.markdown(
+                f"<div class='rank-banner'>{detective_rank(st.session_state.score)}</div>",
+                unsafe_allow_html=True,
+            )
             for k, v in st.session_state.breakdown.items():
                 sign = "+" if v >= 0 else ""
                 st.write(f"- {k}: {sign}{v}")
@@ -494,6 +532,7 @@ else:
                 st.session_state.score = None
                 st.session_state.breakdown = None
                 st.session_state.reasoning = ""
+                st.session_state.pop("current_suspect", None)
                 st.session_state.stage = "playing"
                 st.rerun()
             if c2.button("🏠 New Case", use_container_width=True):
