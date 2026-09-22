@@ -325,7 +325,7 @@ else:
     # INTERROGATION
     # -----------------------------------------------------------------
     elif view == "Interrogation":
-        st.header("🤖 AI Interrogation System")
+        st.header("Interrogation System")
         st.caption("Pick a suspect and a question. If evidence you've found contradicts their answer, "
                    "you'll be warned instantly.")
 
